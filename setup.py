@@ -47,5 +47,6 @@ setup(
     classifiers=classif,
     url='http://github.com/fpemud/msghole',
     download_url='',
-    packages=['msghole'],
+    py_modules=['msghole'],
+    package_dir={'': 'python3'},
 )
