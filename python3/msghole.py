@@ -30,6 +30,7 @@ msghole
 
 import json
 from gi.repository import Gio
+from gi.repository import GLib
 
 __author__ = "fpemud@sina.com (Fpemud)"
 __version__ = "0.0.1"
@@ -52,6 +53,7 @@ class EndPoint:
         self.iostream = None
         self.dis = None
         self.dos = None
+        self.canceller = None
         self.command_received = None
         self.command_sent = None
 
@@ -62,21 +64,28 @@ class EndPoint:
             self.iostream = iostream
             self.dis = Gio.DataInputStream.new(iostream.get_input_stream())
             self.dos = Gio.DataOutputStream.new(iostream.get_output_stream())
-            self.dis.read_line_async(0, None, self._on_receive)     # fixme: 0 should be PRIORITY_DEFAULT, but I can't find it
-        except BaseException:
+            self.canceller = Gio.Cancellable()
+            self.dis.read_line_async(0, self.canceller, self._on_receive)     # fixme: 0 should be PRIORITY_DEFAULT, but I can't find it
+        except:
+            self.iostream = None
             self.dis = None
             self.dos = None
-            self.iostream = None
+            self.canceller = None
+            raise
 
     def close(self):
         if self.iostream is not None:
-            self.on_close()
-            self.iostream.close()
-        self.command_sent = None
-        self.command_received = None
-        self.dis = None
-        self.dos = None
-        self.iostream = None
+            self.canceller.cancel()
+            self.dis = None
+            self.dos = None
+            self.canceller = None
+            GLib.idle_add(self._close)
+        else:
+            assert self.dis is None
+            assert self.dos is None
+            assert self.canceller is None
+            assert self.command_received is None
+            assert self.command_sent is None
 
     def send_notification(self, notification, data):
         jsonObj = dict()
@@ -143,10 +152,10 @@ class EndPoint:
 
                 raise Exception("invalid message")
 
-            self.dis.read_line_async(0, None, self._on_receive)
+            self.dis.read_line_async(0, self.canceller, self._on_receive)
         except Exception as e:
             self.on_error(e)
-            self.close()
+            self._close()
 
     def _send_return(self, data):
         assert self.command_received is not None
@@ -162,4 +171,16 @@ class EndPoint:
         jsonObj = dict()
         jsonObj["error"] = data
         self.dos.put_string(json.dumps(jsonObj) + "\n")
+        self.command_received = None
+
+    def _close(self):
+        assert self.iostream is not None
+        assert self.dis is None
+        assert self.dos is None
+        assert self.canceller is None
+
+        self.on_close()
+        self.iostream.close()
+        self.iostream = None
+        self.command_sent = None
         self.command_received = None
