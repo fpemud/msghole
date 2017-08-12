@@ -56,6 +56,7 @@ class EndPoint:
         self.canceller = None
         self.command_received = None
         self.command_sent = None
+        self.idle_close = None
 
     def set_iostream_and_start(self, iostream):
         assert self.iostream is None
@@ -75,11 +76,12 @@ class EndPoint:
 
     def close(self):
         if self.iostream is not None:
-            self.canceller.cancel()
-            self.dis = None
-            self.dos = None
-            self.canceller = None
-            GLib.idle_add(self._close)
+            if self.idle_close is None:
+                self.canceller.cancel()
+                self.dis = None
+                self.dos = None
+                self.canceller = None
+                self.idle_close = GLib.idle_add(self._close)
         else:
             assert self.dis is None
             assert self.dos is None
@@ -184,3 +186,4 @@ class EndPoint:
         self.iostream = None
         self.command_sent = None
         self.command_received = None
+        self.idle_close = None
