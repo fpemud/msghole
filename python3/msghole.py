@@ -78,9 +78,6 @@ class EndPoint:
         if self.iostream is not None:
             if self.idle_close is None:
                 self.canceller.cancel()
-                self.dis = None
-                self.dos = None
-                self.canceller = None
                 self.idle_close = GLib.idle_add(self._close)
         else:
             assert self.dis is None
@@ -88,13 +85,15 @@ class EndPoint:
             assert self.canceller is None
             assert self.command_received is None
             assert self.command_sent is None
+            assert self.idle_close is None
 
     def send_notification(self, notification, data):
         jsonObj = dict()
         jsonObj["notification"] = notification
         if data is not None:
             jsonObj["data"] = data
-        self.dos.put_string(json.dumps(jsonObj) + "\n")
+        if self.idle_close is None:
+            self.dos.put_string(json.dumps(jsonObj) + "\n")
 
     def exec_command(self, command, data, return_callback=None, error_callback=None):
         assert self.command_sent is None
@@ -103,7 +102,8 @@ class EndPoint:
         jsonObj["command"] = command
         if data is not None:
             jsonObj["data"] = data
-        self.dos.put_string(json.dumps(jsonObj) + "\n")
+        if self.idle_close is None:
+            self.dos.put_string(json.dumps(jsonObj) + "\n")
         self.command_sent = (command, return_callback, error_callback)
 
     def _on_receive(self, source_object, res):
@@ -157,14 +157,16 @@ class EndPoint:
             self.dis.read_line_async(0, self.canceller, self._on_receive)
         except Exception as e:
             self.on_error(e)
-            self._close()
+            if self.idle_close is None:
+                self._close()
 
     def _send_return(self, data):
         assert self.command_received is not None
 
         jsonObj = dict()
         jsonObj["return"] = data
-        self.dos.put_string(json.dumps(jsonObj) + "\n")
+        if self.idle_close is None:
+            self.dos.put_string(json.dumps(jsonObj) + "\n")
         self.command_received = None
 
     def _send_error(self, data):
@@ -172,18 +174,18 @@ class EndPoint:
 
         jsonObj = dict()
         jsonObj["error"] = data
-        self.dos.put_string(json.dumps(jsonObj) + "\n")
+        if self.idle_close is None:
+            self.dos.put_string(json.dumps(jsonObj) + "\n")
         self.command_received = None
 
     def _close(self):
-        assert self.iostream is not None
-        assert self.dis is None
-        assert self.dos is None
-        assert self.canceller is None
-
-        self.on_close()
-        self.iostream.close()
+        if self.iostream is not None:
+            self.on_close()
+            self.iostream.close()
         self.iostream = None
-        self.command_sent = None
+        self.dis = None
+        self.dos = None
+        self.canceller = None
         self.command_received = None
+        self.command_sent = None
         self.idle_close = None
