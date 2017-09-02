@@ -38,54 +38,44 @@ __version__ = "0.0.1"
 
 class EndPoint:
     # sub-class must implement the following functions:
-    #   on_command_XXX_return(self, data)
-    #   on_command_XXX_error(self, reason)
+    #   on_command_XXX(self, data)
     #   on_notification_XXX(self, data)
     #   on_error(self, excp)
     #   on_close(self)
     #
-    # exception in on_command_XXX_return(), on_command_XXX_error(), on_notification_XXX() would close the object and iostream
+    # exception in on_command_XXX(), command_XXX_return_callback(), command_XXX_error_callback(), on_notification_XXX() would close the object
     # no exception is allowed in on_error(), on_close().
-    # close(), send_notification(), exec_command() should not be called in on_XXX().
+    # close(immediate=True) should not be called in on_XXX().
     # This class is not thread-safe.
 
     def __init__(self):
         self.iostream = None
         self.dis = None
         self.dos = None
-        self.canceller = None
         self.command_received = None
         self.command_sent = None
         self.idle_close = None
 
     def set_iostream_and_start(self, iostream):
         assert self.iostream is None
-
         try:
             self.iostream = iostream
             self.dis = Gio.DataInputStream.new(iostream.get_input_stream())
             self.dos = Gio.DataOutputStream.new(iostream.get_output_stream())
-            self.canceller = Gio.Cancellable()
-            self.dis.read_line_async(0, self.canceller, self._on_receive)     # fixme: 0 should be PRIORITY_DEFAULT, but I can't find it
+            self.dis.read_line_async(0, None, self._on_receive)     # fixme: 0 should be PRIORITY_DEFAULT, but I can't find it
         except:
             self.iostream = None
             self.dis = None
             self.dos = None
-            self.canceller = None
             raise
 
-    def close(self):
-        if self.iostream is not None:
-            if self.idle_close is None:
-                self.canceller.cancel()
-                self.idle_close = GLib.idle_add(self._close)
+    def close(self, immediate=False):
+        assert self.iostream is not None
+        self._pre_close()
+        if not immediate:
+            self.idle_close = GLib.idle_add(self._close)
         else:
-            assert self.dis is None
-            assert self.dos is None
-            assert self.canceller is None
-            assert self.command_received is None
-            assert self.command_sent is None
-            assert self.idle_close is None
+            self._close()
 
     def send_notification(self, notification, data):
         jsonObj = dict()
@@ -135,30 +125,34 @@ class EndPoint:
                     if self.command_sent is None:
                         raise Exception("unexpected \"return\" message")
                     cmd, return_cb, error_cb = self.command_sent
-                    if jsonObj["return"] is not None and return_cb is None:
-                        raise Exception("no return callback specified for command " + cmd)
-                    if return_cb is not None:
-                        return_cb(jsonObj["return"])
                     self.command_sent = None
+                    if return_cb is None:
+                        if jsonObj["return"] is not None:
+                            raise Exception("no return callback specified for command " + cmd)
+                    else:
+                        return_cb(jsonObj["return"])
                     break
 
                 if "error" in jsonObj:
                     if self.command_sent is None:
                         raise Exception("unexpected \"error\" message")
                     cmd, return_cb, error_cb = self.command_sent
+                    self.command_sent = None
                     if error_cb is None:
                         raise Exception("no error callback specified for command " + cmd)
-                    error_cb(jsonObj["error"])
-                    self.command_sent = None
+                    else:
+                        error_cb(jsonObj["error"])
                     break
 
                 raise Exception("invalid message")
 
-            self.dis.read_line_async(0, self.canceller, self._on_receive)
+            self.dis.read_line_async(0, None, self._on_receive)
         except Exception as e:
+            assert not isinstance(e, BusinessException)
+            assert self.idle_close is None
             self.on_error(e)
-            if self.idle_close is None:
-                self._close()
+            self._pre_close()
+            self._close()
 
     def _send_return(self, data):
         assert self.command_received is not None
@@ -178,14 +172,14 @@ class EndPoint:
             self.dos.put_string(json.dumps(jsonObj) + "\n")
         self.command_received = None
 
-    def _close(self):
-        if self.iostream is not None:
-            self.on_close()
-            self.iostream.close()
+    def _pre_close(self):
+        self.iostream.close()
         self.iostream = None
         self.dis = None
         self.dos = None
-        self.canceller = None
+
+    def _close(self):
+        self.on_close()
         self.command_received = None
         self.command_sent = None
         self.idle_close = None
