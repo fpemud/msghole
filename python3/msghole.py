@@ -189,3 +189,7 @@ class EndPoint:
         self.command_received = None
         self.command_sent = None
         self.idle_close = None
+
+
+class BusinessException(Exception):
+    pass
