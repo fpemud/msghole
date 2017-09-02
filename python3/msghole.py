@@ -95,7 +95,7 @@ class EndPoint:
         if self.idle_close is None:
             self.dos.put_string(json.dumps(jsonObj) + "\n")
 
-    def exec_command(self, command, data, return_callback=None, error_callback=None):
+    def exec_command(self, command, data=None, return_callback=None, error_callback=None):
         assert self.command_sent is None
 
         jsonObj = dict()
