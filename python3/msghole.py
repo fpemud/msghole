@@ -100,7 +100,7 @@ class EndPoint:
         try:
             line, len = source_object.read_line_finish_utf8(res)
             if line is None:
-                raise Exception("socket closed by peer")
+                raise PeerCloseError()
 
             jsonObj = json.loads(line)
             while True:
@@ -186,4 +186,8 @@ class EndPoint:
 
 
 class BusinessException(Exception):
+    pass
+
+
+class PeerCloseError(Exception):
     pass
