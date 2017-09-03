@@ -45,6 +45,7 @@ class EndPoint:
     #
     # exception in on_command_XXX(), command_XXX_return_callback(), command_XXX_error_callback(), on_notification_XXX() would close the object
     # no exception is allowed in on_error(), on_close().
+    # exec_command() and send_notification() should not be called in on_error() and on_close().
     # close(immediate=True) should not be called in on_XXX().
     # This class is not thread-safe.
 
