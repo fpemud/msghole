@@ -53,6 +53,7 @@ class EndPoint:
         self.iostream = None
         self.dis = None
         self.dos = None
+        self.canceller = None
         self.command_received = None
         self.command_sent = None
         self.idle_close = None
@@ -63,11 +64,13 @@ class EndPoint:
             self.iostream = iostream
             self.dis = Gio.DataInputStream.new(iostream.get_input_stream())
             self.dos = Gio.DataOutputStream.new(iostream.get_output_stream())
-            self.dis.read_line_async(0, None, self._on_receive)     # fixme: 0 should be PRIORITY_DEFAULT, but I can't find it
+            self.canceller = Gio.Cancellable()
+            self.dis.read_line_async(0, self.canceller, self._on_receive)     # fixme: 0 should be PRIORITY_DEFAULT, but I can't find it
         except:
             self.iostream = None
             self.dis = None
             self.dos = None
+            self.canceller = None
             raise
 
     def close(self, immediate=False):
@@ -147,7 +150,7 @@ class EndPoint:
 
                 raise Exception("invalid message")
 
-            self.dis.read_line_async(0, None, self._on_receive)
+            self.dis.read_line_async(0, self.canceller, self._on_receive)
         except Exception as e:
             assert not isinstance(e, BusinessException)
             assert self.idle_close is None
@@ -174,6 +177,8 @@ class EndPoint:
         self.command_received = None
 
     def _pre_close(self):
+        self.canceller.cancel()
+        self.canceller = None
         self.iostream.close()
         self.iostream = None
         self.dis = None
