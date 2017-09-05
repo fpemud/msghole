@@ -106,51 +106,51 @@ class EndPoint:
             if line is None:
                 raise PeerCloseError()
 
-            jsonObj = json.loads(line)
-            while True:
-                if "command" in jsonObj:
-                    if self.command_received is not None:
-                        raise Exception("unexpected \"command\" message")
-                    funcname = "on_command_" + jsonObj["command"].replace("-", "_")
-                    if not hasattr(self, funcname):
-                        raise Exception("no callback for command " + jsonObj["command"])
-                    self.command_received = jsonObj["command"]
-                    getattr(self, funcname)(jsonObj.get("data", None), self._send_return, self._send_error)
-                    break
-
-                if "notification" in jsonObj:
-                    funcname = "on_notification_" + jsonObj["notification"].replace("-", "_")
-                    if not hasattr(self, funcname):
-                        raise Exception("no callback for notification " + jsonObj["notification"])
-                    getattr(self, funcname)(jsonObj.get("data", None))
-                    break
-
-                if "return" in jsonObj:
-                    if self.command_sent is None:
-                        raise Exception("unexpected \"return\" message")
-                    cmd, return_cb, error_cb = self.command_sent
-                    self.command_sent = None
-                    if return_cb is None:
-                        if jsonObj["return"] is not None:
-                            raise Exception("no return callback specified for command " + cmd)
-                    else:
-                        return_cb(jsonObj["return"])
-                    break
-
-                if "error" in jsonObj:
-                    if self.command_sent is None:
-                        raise Exception("unexpected \"error\" message")
-                    cmd, return_cb, error_cb = self.command_sent
-                    self.command_sent = None
-                    if error_cb is None:
-                        raise Exception("no error callback specified for command " + cmd)
-                    else:
-                        error_cb(jsonObj["error"])
-                    break
-
-                raise Exception("invalid message")
-
             self.dis.read_line_async(0, self.canceller, self._on_receive)
+
+            jsonObj = json.loads(line)
+
+            if "command" in jsonObj:
+                if self.command_received is not None:
+                    raise Exception("unexpected \"command\" message")
+                funcname = "on_command_" + jsonObj["command"].replace("-", "_")
+                if not hasattr(self, funcname):
+                    raise Exception("no callback for command " + jsonObj["command"])
+                self.command_received = jsonObj["command"]
+                getattr(self, funcname)(jsonObj.get("data", None), self._send_return, self._send_error)
+                return
+
+            if "notification" in jsonObj:
+                funcname = "on_notification_" + jsonObj["notification"].replace("-", "_")
+                if not hasattr(self, funcname):
+                    raise Exception("no callback for notification " + jsonObj["notification"])
+                getattr(self, funcname)(jsonObj.get("data", None))
+                return
+
+            if "return" in jsonObj:
+                if self.command_sent is None:
+                    raise Exception("unexpected \"return\" message")
+                cmd, return_cb, error_cb = self.command_sent
+                self.command_sent = None
+                if return_cb is None:
+                    if jsonObj["return"] is not None:
+                        raise Exception("no return callback specified for command " + cmd)
+                else:
+                    return_cb(jsonObj["return"])
+                return
+
+            if "error" in jsonObj:
+                if self.command_sent is None:
+                    raise Exception("unexpected \"error\" message")
+                cmd, return_cb, error_cb = self.command_sent
+                self.command_sent = None
+                if error_cb is None:
+                    raise Exception("no error callback specified for command " + cmd)
+                else:
+                    error_cb(jsonObj["error"])
+                return
+
+            raise Exception("invalid message")
         except Exception as e:
             assert not isinstance(e, BusinessException)
             assert self.idle_close is None
