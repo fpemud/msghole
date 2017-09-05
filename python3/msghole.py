@@ -102,13 +102,18 @@ class EndPoint:
 
     def _on_receive(self, source_object, res):
         try:
-            line, len = source_object.read_line_finish_utf8(res)
-            if line is None:
-                raise PeerCloseError()
+            jsonObj = None
+            try:
+                line, len = source_object.read_line_finish_utf8(res)
+                if line is None:
+                    raise PeerCloseError()
+                jsonObj = json.loads(line)
+            except GLib.Error as e:
+                if e.matches(GLib.quark_try_string("g-io-error-quark"), 19):    # Operation was cancelled
+                    return
+                raise
 
             self.dis.read_line_async(0, self.canceller, self._on_receive)
-
-            jsonObj = json.loads(line)
 
             if "command" in jsonObj:
                 if self.command_received is not None:
